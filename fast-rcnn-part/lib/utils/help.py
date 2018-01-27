@@ -63,7 +63,7 @@ def bulk_detect(net, detect_idx, imdb, mylambda):
         BBox=[] # all eligible boxes for this img
         Score=[] # every box in BBox has k*1 score vector
         Y = []
-        CONF_THRESH = 0.3 # if this is high then no image can enter al, but low thresh leads many images enter al
+        CONF_THRESH = 0.5 # if this is high then no image can enter al, but low thresh leads many images enter al
         NMS_THRESH = 0.3
         for cls_ind, cls in enumerate(CLASSES[1:]):
             cls_ind += 1 # because we skipped background
@@ -85,7 +85,7 @@ def bulk_detect(net, detect_idx, imdb, mylambda):
                 Score.append(scores[i])
                 Y.append(judge_y(scores[i]))
                 y = Y[-1]
-                loss = -( (1+y)/2 * np.log(scores[i]) + (1-y)/2 * np.log(1-scores[i]+(2<<30)))
+                loss = -( (1+y)/2 * np.log(scores[i]) + (1-y)/2 * np.log(1-scores[i]+(1e-30)))
                 tmp = np.max(1-loss/mylambda)
                 eps = eps if eps >= tmp else tmp
 
@@ -104,8 +104,8 @@ def judge_uv(loss, gamma, mylambda, eps):
     dim = loss.shape[0]
     v = np.zeros((dim,))
     
-    if(lsum>gamma/(1-eps)):
-    #if(lsum>gamma):
+    #if(lsum>gamma/(1-eps)):
+    if(lsum>gamma):
         return 1, np.array([eps]*dim)
     elif lsum<gamma:
         for i,l in enumerate(loss):

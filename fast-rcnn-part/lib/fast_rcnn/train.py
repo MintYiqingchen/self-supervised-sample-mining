@@ -45,6 +45,12 @@ class SolverWrapper(object):
             pb2.text_format.Merge(f.read(), self.solver_param)
 
         self.solver.net.layers[0].set_roidb(roidb)
+    def update_roidb(self, roidb):
+        print 'Computing bounding-box regression targets...'
+        self.bbox_means, self.bbox_stds = \
+                rdl_roidb.add_bbox_regression_targets(roidb)
+        print 'done'
+        self.solver.net.layers[0].set_roidb(roidb)
 
     def snapshot(self):
         """Take a snapshot of the network after unnormalizing the learned

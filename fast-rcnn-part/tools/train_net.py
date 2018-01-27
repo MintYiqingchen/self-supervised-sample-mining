@@ -10,7 +10,7 @@
 """Train a Fast R-CNN network on a region of interest database."""
 
 import _init_paths
-from fast_rcnn.train import get_training_roidb, train_net
+from fast_rcnn.train import get_training_roidb, train_net, SolverWrapper
 from fast_rcnn.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
 from datasets.factory import get_imdb
 from utils.help import *
@@ -19,7 +19,7 @@ import argparse
 import pprint
 import numpy as np
 import sys, math, logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
 
 def parse_args():
     """
@@ -109,15 +109,18 @@ if __name__ == '__main__':
     tao = 10000; beta = 1000
     # updatable hypeparameters
     gamma = 0.1; mylambda = [-np.log(0.9)]*imdb.num_classes
-    loopcounter = 0
+    # train record
+    loopcounter = 0; train_iters = 0; iters_sum = train_iters
+    # get solver instance
+    sw = SolverWrapper(args.solver, train_roidb, output_dir,
+                        pretrained_model=pretrained_model_name)
     while(True):
         # use chosen samples finetune W
-        train_iters = min(args.max_iters,train_num*10)
-        
-        train_net(args.solver, train_roidb, output_dir,
-                pretrained_model=pretrained_model_name,
-                max_iters=train_iters)
-        
+        train_iters = min(12000 ,len(train_roidb*10)-train_iters)
+        iters_sum += train_iters
+        sw.update_roidb(train_roidb)
+        sw.train_model(train_iters)
+
         # detact remaining samples
         remaining = list(set(range(imdb.num_images))-set(tableA.nonzero()))
         # load latest trained model
@@ -141,7 +144,7 @@ if __name__ == '__main__':
                 boxscore = scoreMatrix[i][j]
                 # fake label box
                 y = yVecs[i][j] 
-                loss = -( (1+y)/2 * np.log(boxscore) + (1-y)/2 * np.log(1-boxscore))
+                loss = -( (1+y)/2 * np.log(boxscore) + (1-y)/2 * np.log(1-boxscore+1e-30))
                 cls_loss_sum += loss
                 # choose u,v by loss
                 u_star, v_star = judge_uv(loss, gamma, mylambda, eps)
@@ -164,23 +167,25 @@ if __name__ == '__main__':
                 ss_fake_gt.append({'boxes':img_boxes, 'gt_classes':cls,
                     'gt_overlaps':1.0, 'flipped':False})
 
-        if len(al_candidate)==0 or loopcounter>args.max_iters:
+        if len(al_candidate)<=10 or iters_sum>args.max_iters:
             print 'all process finish at loop ',loopcounter
+            print 'the net train for {} epoches'.format(iters_sum)
             break
         
         # 50% enter al
         r = np.random.rand(len(al_candidate))
         al_candidate = [x for i,x in enumerate(al_candidate) if r[i]>0.5]
         print 'sample index chosen for al: ', al_candidate
-        print 'sample index chosen by ss: ', ss_candidate
+        print 'sample chosen by ss: ',len(ss_candidate)
         alamount += len(al_candidate); ssamount += len(ss_candidate)
-        log.info('al amount:{}/{}, ss amount: {}'.format(alamount,imdb.num_images,ssamount))
+        logging.info('al amount:{}/{}, ss amount: {}'.format(alamount,imdb.num_images,ssamount))
         # generate training set for next loop   
         for idx in al_candidate:
             tableA.set(idx)
         
         next_train_idx = tableA.nonzero(); next_train_idx.extend(ss_candidate)
         imdb.fake_gt = ss_fake_gt; imdb.fake_idx = ss_candidate; imdb.has_change = True
+        cfg.TRAIN.USE_FLIPPED = False # dont need filp again
         roidb = get_training_roidb(imdb)
         train_roidb = [roidb[i] for i in next_train_idx]
 
