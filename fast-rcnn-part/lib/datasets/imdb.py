@@ -27,6 +27,8 @@ class imdb(object):
         # Use this dict for storing dataset specific config options
         self.config = {}
 
+        self.has_change = None
+
     @property
     def name(self):
         return self._name
@@ -58,9 +60,10 @@ class imdb(object):
         #   gt_overlaps
         #   gt_classes
         #   flipped
-        if self._roidb is not None:
+        if self._roidb is not None :
             return self._roidb
         self._roidb = self.roidb_handler()
+        self.has_change = False
         return self._roidb
 
     @property
@@ -167,6 +170,8 @@ class imdb(object):
                 argmaxes = gt_overlaps.argmax(axis=1)
                 maxes = gt_overlaps.max(axis=1)
                 I = np.where(maxes > 0)[0]
+                #print('gtboxes:{} boxes:{}'
+                #        .format(gt_boxes.shape, argmaxes[I]))
                 overlaps[I, gt_classes[argmaxes[I]]] = maxes[I]
 
             overlaps = scipy.sparse.csr_matrix(overlaps)
@@ -181,9 +186,11 @@ class imdb(object):
     def merge_roidbs(a, b):
         assert len(a) == len(b)
         for i in xrange(len(a)):
+            #print('boxes {} {}'.format(a[i]['boxes'].shape,b[i]['boxes'].shape))
             a[i]['boxes'] = np.vstack((a[i]['boxes'], b[i]['boxes']))
-            a[i]['gt_classes'] = np.hstack((a[i]['gt_classes'],
-                                            b[i]['gt_classes']))
+            #print('cls {} {}'.format(a[i]['gt_classes'].shape,b[i]['gt_classes'].shape))
+            a[i]['gt_classes'] = np.hstack((a[i]['gt_classes'], b[i]['gt_classes']))
+            # print('overlaps {} {}'.format(a[i]['gt_overlaps'].shape,b[i]['gt_overlaps'].shape))
             a[i]['gt_overlaps'] = scipy.sparse.vstack([a[i]['gt_overlaps'],
                                                        b[i]['gt_overlaps']])
         return a

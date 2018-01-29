@@ -10,7 +10,7 @@
 """Train a Fast R-CNN network on a region of interest database."""
 
 import _init_paths
-from fast_rcnn.train import get_training_roidb, train_net, SolverWrapper
+from fast_rcnn.train import get_training_roidb, train_net, SolverWrapper, update_training_roidb
 from fast_rcnn.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
 from datasets.factory import get_imdb
 from utils.help import *
@@ -18,6 +18,7 @@ import caffe
 import argparse
 import pprint
 import numpy as np
+import scipy
 import sys, math, logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
 
@@ -151,7 +152,7 @@ if __name__ == '__main__':
                 #logging.info('u_star is {}, v_star is {}'.format(u_star, v_star))  
                 # ss process
                 if(u_star!=1):
-                    if(np.sum(y==1)==1):
+                    if(np.sum(y==1)==1 and np.where(y==1)[0]!=0): # not background
                         img_boxes.append(box)
                         cls.append(np.where(y==1)[0])
                     elif(np.sum(y==1)==0):
@@ -164,8 +165,14 @@ if __name__ == '__main__':
             # make fake ground truth for this img
             if len(img_boxes) != 0:
                 ss_candidate.append(remaining[i])
-                ss_fake_gt.append({'boxes':img_boxes, 'gt_classes':cls,
-                    'gt_overlaps':1.0, 'flipped':False})
+                overlaps = np.zeros((len(img_boxes), imdb.num_classes), dtype=np.float32)
+                for i in range(len(img_boxes)):
+                    overlaps[i, cls[i]]=1.0
+                
+                overlaps = scipy.sparse.csr_matrix(overlaps)
+                ss_fake_gt.append({'boxes':np.array(img_boxes), 
+                    'gt_classes':np.array(cls,dtype=np.int).flatten(),
+                    'gt_overlaps':overlaps, 'flipped':False})
 
         if len(al_candidate)<=10 or iters_sum>args.max_iters:
             print 'all process finish at loop ',loopcounter
@@ -184,9 +191,8 @@ if __name__ == '__main__':
             tableA.set(idx)
         
         next_train_idx = tableA.nonzero(); next_train_idx.extend(ss_candidate)
-        imdb.fake_gt = ss_fake_gt; imdb.fake_idx = ss_candidate; imdb.has_change = True
-        cfg.TRAIN.USE_FLIPPED = False # dont need filp again
-        roidb = get_training_roidb(imdb)
+        # cfg.TRAIN.USE_FLIPPED = False # dont need filp again
+        roidb = update_training_roidb(imdb,ss_candidate,ss_fake_gt)
         train_roidb = [roidb[i] for i in next_train_idx]
 
         loopcounter += 1

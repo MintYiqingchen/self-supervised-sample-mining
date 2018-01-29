@@ -92,7 +92,9 @@ class SolverWrapper(object):
         """Network training loop."""
         last_snapshot_iter = -1
         timer = Timer()
-        while self.solver.iter < max_iters:
+        now_iter = 0
+        while now_iter < max_iters:
+            now_iter += 1
             # Make one SGD update
             timer.tic()
             self.solver.step(1)
@@ -107,7 +109,7 @@ class SolverWrapper(object):
         if last_snapshot_iter != self.solver.iter:
             self.snapshot()
 
-def get_training_roidb(imdb, ss_candidate=None, ss_fake_gt=None):
+def get_training_roidb(imdb):
     """Returns a roidb (Region of Interest database) for use in training."""
     if cfg.TRAIN.USE_FLIPPED:
         print 'Appending horizontally-flipped training examples...'
@@ -119,6 +121,12 @@ def get_training_roidb(imdb, ss_candidate=None, ss_fake_gt=None):
     print 'done'
 
     return imdb.roidb
+
+def update_training_roidb(imdb, ss_candidate, ss_fake_gt):
+    '''replace some gt with fake gt'''
+    #imdb.fake_gt = ss_fake_gt; imdb.fake_idx = ss_candidate; imdb.has_change = True
+    imdb.replace_gt(ss_candidate,ss_fake_gt,cfg.TRAIN.USE_FLIPPED)
+    return get_training_roidb(imdb)
 
 def train_net(solver_prototxt, roidb, output_dir,
               pretrained_model=None, max_iters=40000):

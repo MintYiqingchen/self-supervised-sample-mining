@@ -38,7 +38,7 @@ class pascal_voc(datasets.imdb):
         self._roidb_handler = self.selective_search_roidb
         
         # use for self pace study
-        self.fake_gt=None; self.fake_idx = None; self.has_change = False
+        #self.fake_gt=None; self.fake_idx = None; self.has_change = False
         # PASCAL specific config options
         self.config = {'cleanup'  : True,
                        'use_salt' : True,
@@ -122,15 +122,7 @@ class pascal_voc(datasets.imdb):
             print '{} ss roidb loaded from {}'.format(self.name, cache_file)
             return roidb
 
-        fake_gt = self.fake_gt; fake_idx = self.fake_idx
-        if fake_idx and fake_gt and self._image_set != 'test':
-            gt = self.gt_roidb()
-            # replace some gt by fake_gt[fake_idx]
-            for i in fake_idx:
-                gt[i] = fake_gt[i]
-            ss_roidb = self._load_selective_search_roidb(gt)
-            roidb = datasets.imdb.merge_roidbs(gt, ss_roidb)
-        elif self._image_set != 'test':
+        if self._image_set != 'test':
             gt_roidb = self.gt_roidb()
             ss_roidb = self._load_selective_search_roidb(gt_roidb)
             roidb = datasets.imdb.merge_roidbs(gt_roidb, ss_roidb)
@@ -139,9 +131,24 @@ class pascal_voc(datasets.imdb):
         with open(cache_file, 'wb') as fid:
             cPickle.dump(roidb, fid, cPickle.HIGHEST_PROTOCOL)
         print 'wrote ss roidb to {}'.format(cache_file)
-        self.has_change = False # record if need reload data
         return roidb
 
+    def replace_gt(self, ss_candidate, ss_fake_gt, flip):
+        '''replace gt with ss_fake_gt'''
+        gt = self.gt_roidb()
+        print('length of gt roidb:{}'.format(len(gt)))
+        if flip:
+            self._image_index=self._image_index[:len(gt)]
+        # replace some gt by fake_gt[fake_idx]
+        for j,i in enumerate(ss_candidate):
+            if (flip and i<len(gt)) or not flip:
+                gt[i]=ss_fake_gt[j]
+        ss_roidb = self._load_selective_search_roidb(gt)
+        roidb = datasets.imdb.merge_roidbs(gt, ss_roidb)
+        print 'replace gt with self pace gt'
+        self._roidb = roidb
+        return roidb
+        
     def _load_selective_search_roidb(self, gt_roidb):
         filename = os.path.abspath(os.path.join(self.cache_path, '..',
                                                 'selective_search_data',
