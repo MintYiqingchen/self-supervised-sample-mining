@@ -13,15 +13,15 @@ import _init_paths
 from fast_rcnn.train import get_training_roidb, train_net, SolverWrapper, update_training_roidb
 from fast_rcnn.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
 from datasets.factory import get_imdb
+import datasets.imdb
 from utils.help import *
 import caffe
 import argparse
 import pprint
 import numpy as np
-import scipy
 import sys, math, logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
 def parse_args():
     """
     Parse input arguments
@@ -48,13 +48,13 @@ def parse_args():
     parser.add_argument('--rand', dest='randomize',
                         help='randomize (do not use a fixed seed)',
                         action='store_true')
+    parser.add_argument('--set', dest='set_cfgs',
+                        help='set config keys', default=None,
+                        nargs=argparse.REMAINDER)
     parser.add_argument('--unuse_al', help='do not use al process',
                         action='store_true')
     parser.add_argument('--unuse_ss', help='do not use ss process',
                         action='store_true')
-    parser.add_argument('--set', dest='set_cfgs',
-                        help='set config keys', default=None,
-                        nargs=argparse.REMAINDER)
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -63,8 +63,33 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-from bitmap import BitMap
+def combined_roidb(imdb_names):
+    def get_roidb(imdb_name):
+        imdb = get_imdb(imdb_name)
+        print 'Loaded dataset `{:s}` for training'.format(imdb.name)
+        imdb.set_proposal_method(cfg.TRAIN.PROPOSAL_METHOD)
+        print 'Set proposal method: {:s}'.format(cfg.TRAIN.PROPOSAL_METHOD)
+        roidb = get_training_roidb(imdb)
+        return roidb
 
+    roidbs = [get_roidb(s) for s in imdb_names.split('+')]
+    roidb = roidbs[0]
+    if len(roidbs) > 1:
+        for r in roidbs[1:]:
+            roidb.extend(r)
+        imdb = datasets.imdb.imdb(imdb_names)
+    else:
+        imdb = get_imdb(imdb_names)
+    return imdb, roidb
+
+def get_Imdbs(imdb_names):
+    imdbs = [get_imdb(s) for s in imdb_names.split('+')]
+    for im in imdbs:
+        im.set_proposal_method(cfg.TRAIN.PROPOSAL_METHOD)
+        print 'Set proposal method: {:s}'.format(cfg.TRAIN.PROPOSAL_METHOD)
+    return datasets.imdb.Imdbs(imdbs)
+
+from bitmap import BitMap
 if __name__ == '__main__':
     args = parse_args()
 
@@ -76,6 +101,8 @@ if __name__ == '__main__':
     if args.set_cfgs is not None:
         cfg_from_list(args.set_cfgs)
 
+    cfg.GPU_ID = args.gpu_id
+
     print('Using config:')
     pprint.pprint(cfg)
 
@@ -86,57 +113,43 @@ if __name__ == '__main__':
 
     # set up caffe
     caffe.set_mode_gpu()
-    if args.gpu_id is not None:
-        caffe.set_device(args.gpu_id)
+    caffe.set_device(args.gpu_id)
 
-    imdb = get_imdb(args.imdb_name)
-    print 'Loaded dataset `{:s}` for training'.format(imdb.name)
+    imdb = get_Imdbs(args.imdb_name)
     roidb = get_training_roidb(imdb)
+    print '{:d} roidb entries'.format(len(roidb))
 
-    output_dir = get_output_dir(imdb, None)
+    output_dir = get_output_dir(imdb)
     print 'Output will be saved to `{:s}`'.format(output_dir)
-    
+
     # some statistic to record
     alamount = 0; ssamount = 0
     # set bitmap for AL
     tableA = BitMap(imdb.num_images)
-    # choose initiail samples:VOC2007 10% 
+    # choose initiail samples:VOC2007
     sample_num = imdb.num_images
-    train_num = int(math.ceil(sample_num*0.1))
-    print 'There are %d images, choose %d samples for train.'%(sample_num, train_num)
+    train_num = len(imdb[imdb.item_name(0)].roidb)
+    print 'All VOC2007 images use for initial train, image numbers:%d'%(train_num)
     for i in range(train_num):
         tableA.set(i)
 
     train_roidb = [roidb[i] for i in range(train_num)]
     pretrained_model_name = args.pretrained_model
 
-    # static parameters
-    tao = 60000; beta = 1000
-    # updatable hypeparameters
-    gamma = 0.1; mylambda = np.array([-np.log(0.9)]*imdb.num_classes)
-    # train record
-    loopcounter = 0; train_iters = 0; iters_sum = train_iters
-    discard_num = 0
-    # record number for some al proportion
-    # checkpoint = [x*imdb.num_images for x in np.linspace(0.1,1,10)]
     # get solver instance
     sw = SolverWrapper(args.solver, train_roidb, output_dir,
                         pretrained_model=pretrained_model_name)
+    sw.train_model(70000)
+'''
     while(True):
-        # use chosen samples finetune W
-        train_iters = min(12000 ,len(train_roidb)*10-train_iters)
-        iters_sum += train_iters
-        sw.update_roidb(train_roidb)
-        sw.train_model(train_iters)
-
         # detact remaining samples
         remaining = list(set(range(imdb.num_images))-set(tableA.nonzero()))
         # load latest trained model
-        pretrained_model_name = choose_model(output_dir) 
+        pretrained_model_name = choose_model(output_dir)
         modelpath = os.path.join(output_dir, pretrained_model_name)
-        protopath = os.path.join('models/CaffeNet','test.prototxt')
+        protopath = os.path.join('models/pascal_voc/ResNet-50/rfcn_end2end',
+                'test_agnostic.prototxt')
         print 'choose latest model:{}'.format(modelpath)
-
         model = load_model(protopath,modelpath)
         scoreMatrix, boxRecord,yVecs, eps = bulk_detect(model, remaining, imdb, mylambda)
         logging.debug('scoreMatrix:{}, boxRecord:{}, eps:{}, yVecs:{}'.format(scoreMatrix.shape,
@@ -187,19 +200,15 @@ if __name__ == '__main__':
             print 'all process finish at loop ',loopcounter
             print 'the net train for {} epoches'.format(iters_sum)
             break
-
-        # 50% enter al
-        r = np.random.rand(len(al_candidate))
-        al_candidate = [x for i,x in enumerate(al_candidate) if r[i]>0.7]
         if not args.unuse_al:
             # control al proportion
-            '''
+            
             if alamount+len(al_candidate)>=checkpoint[0]:
                 al_candidate = al_candidate[:int(checkpoint[0]-alamount)]
                 tmp = checkpoint.pop(0)
                 print 'checkpoint: {}%% samples for al'.format(tmp/imdb.num_images)
-            '''
-            print 'sample chosen by al: ', len(al_candidate)
+            
+            print 'sample index chosen for al: ', al_candidate
         else:
             al_candidate = []
         if not args.unuse_ss:
@@ -223,4 +232,15 @@ if __name__ == '__main__':
         if iters_sum<=tao:
             mylambda = 0.9 * mylambda+0.1*cls_loss_sum/bulk_box_num
             cls_loss_sum = 0.0
+
+        # use chosen samples finetune W
+        train_iters = min(12000 ,len(train_roidb)*10-train_iters)
+        iters_sum += train_iters
+        sw.update_roidb(train_roidb)
+        sw.train_model(iters_sum)
+'''
+
+
+
+
 
