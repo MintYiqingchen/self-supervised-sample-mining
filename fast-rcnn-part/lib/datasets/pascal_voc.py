@@ -225,7 +225,6 @@ class pascal_voc(datasets.imdb):
         gt_classes = np.zeros((num_objs), dtype=np.int32)
         overlaps = np.zeros((num_objs, self.num_classes), dtype=np.float32)
 
-        islabel =  np.zeros((num_objs), dtype=np.int32)
         # Load object bounding boxes into a data frame.
         for ix, obj in enumerate(objs):
             # Make pixel indexes 0-based
@@ -238,22 +237,12 @@ class pascal_voc(datasets.imdb):
             boxes[ix, :] = [x1, y1, x2, y2]
             gt_classes[ix] = cls
             overlaps[ix, cls] = 1.0
-            islabel[ix] = num_objs 
-#            if len(index)>6 and num_objs ==1:
-#		print (index)
-#		islabel[ix]=num_objs+1
-#            fs=open('/home/yarley/yanxp/dataset/VOCdevkit2008/VOC2008/ImageSets/Main/trainval.txt')
-#            for line in fs.readlines():
-#                if index == line.strip('\n'):
-#                   islabel[ix]=num_objs
-# 		   print ("islabel:",num_objs)
         overlaps = scipy.sparse.csr_matrix(overlaps)
 
         return {'boxes' : boxes,
                 'gt_classes': gt_classes,
                 'gt_overlaps' : overlaps,
-                'flipped' : False,
-                'islabel' : islabel}
+                'flipped' : False}
 
     def _write_voc_results_file(self, all_boxes):
         use_salt = self.config['use_salt']
@@ -290,6 +279,7 @@ class pascal_voc(datasets.imdb):
         cmd = 'cd {} && '.format(path)
         cmd += '{:s} -nodisplay -nodesktop '.format(datasets.MATLAB)
         cmd += '-r "dbstop if error; '
+        cmd += 'setenv(\'LC_ALL\',\'C\');'
         cmd += 'voc_eval(\'{:s}\',\'{:s}\',\'{:s}\',\'{:s}\',{:d}); quit;"' \
                .format(self._devkit_path, comp_id,
                        self._image_set, output_dir, int(rm_results))

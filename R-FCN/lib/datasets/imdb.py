@@ -288,7 +288,7 @@ class Imdbs(imdb):
     def classes(self):
         a=set()
         for k,v in self.imdb_dict.items():
-            a.union(v.classes[1:])
+            a = a.union(v.classes[1:])
         return ['__backgound__']+list(a) 
     @property
     def num_classes(self):
@@ -307,7 +307,9 @@ class Imdbs(imdb):
         subidx, inst = self.idx_project(i)
         return inst.image_path_at(subidx)
     def replace_gt(self, ss_candidate, ss_fake_gt, flipped):
-        ''' map to imdb '''
+        ''' map to imdb,pay attention: if ss is empty, it will lead to some problems '''
+        if len(ss_candidate)==0:
+            return
         z = zip(ss_candidate, ss_fake_gt)
         z = sorted(z, key=lambda x:x[0])
         ss_candidate, ss_fake_gt = zip(*z) #tuple
@@ -315,11 +317,11 @@ class Imdbs(imdb):
         for im in self.imdb_dict.values():
             posi = 0
             while posi<=len(ss_candidate):
-                if ss_candidate[posi]>=prefix_num_sum+im.num_images:
+                if posi==len(ss_candidate) or ss_candidate[posi]>=prefix_num_sum+im.num_images:
                     tmpss = [x-prefix_num_sum for x in ss_candidate[:posi]]
                     im.replace_gt(tmpss, ss_fake_gt[:posi], flipped)
                     ss_candidate = ss_candidate[posi:]; ss_fake_gt = ss_fake_gt[posi:]
-                    last_img_num += im.num_images
+                    prefix_num_sum += im.num_images
                     break
                 posi += 1
 

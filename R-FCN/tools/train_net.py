@@ -20,6 +20,7 @@ import argparse
 import pprint
 import numpy as np
 import sys, math, logging
+import scipy
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
 def parse_args():
@@ -136,11 +137,21 @@ if __name__ == '__main__':
     train_roidb = [roidb[i] for i in range(train_num)]
     pretrained_model_name = args.pretrained_model
 
+    # static parameters
+    tao = 60000; beta = 1000
+    # updatable hypeparameters
+    gamma = 0.6; mylambda = np.array([-np.log(0.9)]*imdb.num_classes)
+    # train record
+    loopcounter = 0; train_iters = 0; iters_sum = train_iters
+    discard_num = 0
+    # record number for some al proportion
+    checkpoint = [int(x*imdb.num_images) for x in np.linspace(0.1,1,10)]
+
     # get solver instance
     sw = SolverWrapper(args.solver, train_roidb, output_dir,
                         pretrained_model=pretrained_model_name)
-    sw.train_model(70000)
-'''
+    #sw.train_model(70000)
+
     while(True):
         # detact remaining samples
         remaining = list(set(range(imdb.num_images))-set(tableA.nonzero()))
@@ -171,7 +182,6 @@ if __name__ == '__main__':
                 cls_loss_sum += loss
                 # choose u,v by loss
                 u_star, v_star = judge_uv(loss, gamma, mylambda, eps)
-                #logging.info('u_star is {}, v_star is {}'.format(u_star, v_star))
                 # ss process
                 if(u_star!=1):
                     if(np.sum(y==1)==1 and np.where(y==1)[0]!=0): # not background
@@ -200,15 +210,19 @@ if __name__ == '__main__':
             print 'all process finish at loop ',loopcounter
             print 'the net train for {} epoches'.format(iters_sum)
             break
+        # 50% enter al
+        r = np.random.rand(len(al_candidate))
+        al_candidate = [x for i,x in enumerate(al_candidate) if r[i]>0.5]
+
         if not args.unuse_al:
             # control al proportion
             
             if alamount+len(al_candidate)>=checkpoint[0]:
                 al_candidate = al_candidate[:int(checkpoint[0]-alamount)]
                 tmp = checkpoint.pop(0)
-                print 'checkpoint: {}%% samples for al'.format(tmp/imdb.num_images)
+                print 'checkpoint: {}%% samples for al, model name:{}'.format(tmp/imdb.num_images,pretrained_model_name )
             
-            print 'sample index chosen for al: ', al_candidate
+            print 'sample chosen for al: ', len(al_candidate)
         else:
             al_candidate = []
         if not args.unuse_ss:
@@ -226,6 +240,7 @@ if __name__ == '__main__':
         next_train_idx = tableA.nonzero(); next_train_idx.extend(ss_candidate)
         # cfg.TRAIN.USE_FLIPPED = False # dont need filp again
         roidb = update_training_roidb(imdb,ss_candidate,ss_fake_gt)
+        print 'roidb len:{}'.format(len(roidb))
         train_roidb = [roidb[i] for i in next_train_idx]
 
         loopcounter += 1
@@ -238,7 +253,7 @@ if __name__ == '__main__':
         iters_sum += train_iters
         sw.update_roidb(train_roidb)
         sw.train_model(iters_sum)
-'''
+
 
 
 

@@ -121,8 +121,11 @@ class pascal_voc(imdb):
         for j,i in enumerate(ss_candidate):
             if (flip and i<len(gt)) or not flip:
                 gt[i]=ss_fake_gt[j]
-        ss_roidb = self._load_selective_search_roidb(gt)
-        roidb = datasets.imdb.merge_roidbs(gt, ss_roidb)
+        if cfg.TRAIN.PROPOSAL_METHOD=='selective_search':
+            ss_roidb = self._load_selective_search_roidb(gt)
+            roidb = datasets.imdb.merge_roidbs(gt, ss_roidb)
+        else:
+            roidb = gt
         print 'replace gt with self pace gt'
         self._roidb = roidb
         return roidb

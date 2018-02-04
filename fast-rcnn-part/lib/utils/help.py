@@ -81,11 +81,12 @@ def bulk_detect(net, detect_idx, imdb, mylambda):
             for i in inds:
                 bbox = dets[i, :4]
                 BBox.append(bbox)
+                j = keep[i]
                 # find which region this box deriving from
-                Score.append(scores[i])
-                Y.append(judge_y(scores[i]))
+                Score.append(scores[j].copy())
+                Y.append(judge_y(scores[j]))
                 y = Y[-1]
-                loss = -( (1+y)/2 * np.log(scores[i]) + (1-y)/2 * np.log(1-scores[i]+(1e-30)))
+                loss = -( (1+y)/2 * np.log(scores[j]) + (1-y)/2 * np.log(1-scores[j]+(1e-30)))
                 tmp = np.max(1-loss/mylambda)
                 eps = eps if eps >= tmp else tmp
 

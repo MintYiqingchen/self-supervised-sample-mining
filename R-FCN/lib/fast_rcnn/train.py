@@ -18,7 +18,8 @@ from caffe.proto import caffe_pb2
 import google.protobuf as pb2
 def update_training_roidb(imdb, ss_candidate, ss_fake_gt):
     '''replace some gt with fake gt'''
-    #imdb.fake_gt = ss_fake_gt; imdb.fake_idx = ss_candidate; imdb.has_change = True
+    if len(ss_candidate)==0:
+        return imdb.roidb
     imdb.replace_gt(ss_candidate,ss_fake_gt,cfg.TRAIN.USE_FLIPPED)
     return get_training_roidb(imdb)
 
@@ -57,6 +58,16 @@ class SolverWrapper(object):
             pb2.text_format.Merge(f.read(), self.solver_param)
 
         self.solver.net.layers[0].set_roidb(roidb)
+
+    def update_roidb(self, roidb):
+        roidb = filter_roidb(roidb)
+        if cfg.TRAIN.BBOX_REG:
+            print 'Computing bounding-box regression targets...'
+            self.bbox_means, self.bbox_stds = \
+                    rdl_roidb.add_bbox_regression_targets(roidb)
+            print 'done'
+        self.solver.net.layers[0].set_roidb(roidb)
+
 
     def snapshot(self):
         """Take a snapshot of the network after unnormalizing the learned

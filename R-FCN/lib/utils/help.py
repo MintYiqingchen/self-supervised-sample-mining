@@ -44,7 +44,7 @@ def bulk_detect(net, detect_idx, imdb, mylambda):
     import cv2
     from fast_rcnn.config import cfg
     from utils.timer import Timer
-    from utils.cython_nms import nms
+    from fast_rcnn.nms_wrapper import nms
     from fast_rcnn.test import im_detect
 
     roidb = imdb.roidb
@@ -56,7 +56,7 @@ def bulk_detect(net, detect_idx, imdb, mylambda):
 
         timer = Timer()
         timer.tic()
-        scores, boxes = im_detect(net, im, roidb[i]['boxes'])
+        scores, boxes = im_detect(net, im)
         timer.toc()
         print ('Detection took {:.3f}s for {:d}im object proposals').format(timer.total_time, boxes.shape[0])
 
@@ -67,7 +67,7 @@ def bulk_detect(net, detect_idx, imdb, mylambda):
         NMS_THRESH = 0.3
         for cls_ind, cls in enumerate(CLASSES[1:]):
             cls_ind += 1 # because we skipped background
-            cls_boxes = boxes[:, 4*cls_ind:4*(cls_ind + 1)]
+            cls_boxes = boxes[:, 4:8]
             cls_scores = scores[:, cls_ind]
             dets = np.hstack((cls_boxes,
                         cls_scores[:, np.newaxis])).astype(np.float32)
@@ -78,16 +78,19 @@ def bulk_detect(net, detect_idx, imdb, mylambda):
             if len(inds) == 0 :
                 continue
             #vis_detections(imgpath.split('/')[-1], im, cls, dets, thresh=CONF_THRESH)
-            for i in inds:
-                bbox = dets[i, :4]
+            for k,idx in enumerate(inds):
+                bbox = dets[idx, :4]
                 BBox.append(bbox)
+                j = keep[idx]
                 # find which region this box deriving from
-                Score.append(scores[i])
-                Y.append(judge_y(scores[i]))
+                Score.append(scores[j].copy())
+                Y.append(judge_y(scores[j]))
                 y = Y[-1]
-                loss = -( (1+y)/2 * np.log(scores[i]) + (1-y)/2 * np.log(1-scores[i]+(1e-30)))
+                #print '{}{}: box:{} score:{}'.format(i,k,bbox,scores[j])
+                loss = -( (1+y)/2 * np.log(scores[j]) + (1-y)/2 * np.log(1-scores[j]+(1e-30)))
                 tmp = np.max(1-loss/mylambda)
                 eps = eps if eps >= tmp else tmp
+                #print 'scores:{}'.format(scores[j])
 
         logging.debug("BBox for this image:{}\nScore for this image{}".format(np.array(BBox).shape, np.array(Score).shape))
         allBox.append(BBox[:]); allScore.append(Score[:]); allY.append(Y[:])
