@@ -26,6 +26,7 @@ class imdb(object):
         self._roidb_handler = self.default_roidb
         # Use this dict for storing dataset specific config options
         self.config = {}
+        self._reload = False
 
     @property
     def name(self):
@@ -62,8 +63,9 @@ class imdb(object):
         #   gt_overlaps
         #   gt_classes
         #   flipped
-        if self._roidb is not None:
+        if self._roidb is not None and not self._reload:
             return self._roidb
+        print('reload')
         self._roidb = self.roidb_handler()
         return self._roidb
 
@@ -273,6 +275,12 @@ class Imdbs(imdb):
         '''not perfect implementation'''
         for im in self.imdb_dict.values():
             im.set_classes(number)
+    def reset_image_index(self):
+        try:
+            for im in self.imdb_dict.values():
+                im.reset_image_index()
+        except:
+            print 'error:Imdbs reset_image_index'
     @property
     def roidb(self):
         res = []

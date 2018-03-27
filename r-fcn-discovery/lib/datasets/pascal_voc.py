@@ -64,6 +64,8 @@ class pascal_voc(imdb):
         self._class_to_ind = dict(zip(self.classes, xrange(self.num_classes)))
         self._reload = True
 
+    def reset_image_index(self):
+        self._image_index = self.all_image_index
     def image_path_at(self, i):
         """
         Return the absolute path to image i in the image sequence.
@@ -115,9 +117,6 @@ class pascal_voc(imdb):
 
         gt_roidb = [self._load_pascal_annotation(index)
                     for index in self.all_image_index]
-        # change valid image index
-        # self._image_index = [i for i in range(len(self.all_image_index)) if len(gt_roidb[i]['boxes'])>0]
-        # gt_roidb = [x for x in gt_roidb if len(x['boxes'])>0]
         with open(cache_file, 'wb') as fid:
             cPickle.dump(gt_roidb, fid, cPickle.HIGHEST_PROTOCOL)
         print 'wrote gt roidb to {}'.format(cache_file)

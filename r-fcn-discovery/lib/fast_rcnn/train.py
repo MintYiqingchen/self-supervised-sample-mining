@@ -22,13 +22,17 @@ class ClassController(object):
     def __init__(self, schedule, imdb):
         self.schedule = schedule
         self._imdb = imdb
-        self._now = 0
+        self._now = -1
 
     def controlClass(self, nowepoch):
-        
-        if self._now+1 <len(self.schedule) and nowepoch >= self.schedule[self._now+1][0]:
-           self._now += 1
-        self._imdb.set_classes(self.schedule[self._now][1])
+        control = False
+        if (self._now+1 <len(self.schedule) and nowepoch >= self.schedule[self._now+1][0]):
+            self._now += 1
+            self._imdb.reset_image_index()
+            print 'invoke control'
+            self._imdb.set_classes(self.schedule[self._now][1])
+            control = True
+        return control
 
 def update_training_roidb(imdb, ss_candidate, ss_fake_gt):
     '''replace some gt with fake gt'''
@@ -178,7 +182,7 @@ class SolverWrapper(object):
             self.solver.step(1)
             timer.toc()
             current_iter += 1
-            print ('curr_iter:{}/{}'.format(current_iter,max_iters))
+            # print ('curr_iter:{}/{}'.format(current_iter,max_iters))
             if self.solver.iter % (10 * self.solver_param.display) == 0:
                 print 'speed: {:.3f}s / iter'.format(timer.average_time)
 
@@ -196,18 +200,41 @@ def get_training_roidb(imdb):
         print 'Appending horizontally-flipped training examples...'
         imdb.append_flipped_images()
         print 'done'
-
     print 'Preparing training data...'
     rdl_roidb.prepare_roidb(imdb)
     print 'done'
-
     return imdb.roidb
+
+def filter_blank_roidb(roidb):
+    ''' remove roidb whose bbox is empty'''
+    def is_valid(entry):
+        # Valid images have:
+        #   (1) At least one foreground RoI OR
+        #   (2) At least one background RoI
+        overlaps = entry['max_overlaps']
+        # find boxes with sufficient overlap
+        fg_inds = np.where(overlaps >= cfg.TRAIN.FG_THRESH)[0]
+        # Select background RoIs as those within [BG_THRESH_LO, BG_THRESH_HI)
+        bg_inds = np.where((overlaps < cfg.TRAIN.BG_THRESH_HI) &
+                           (overlaps >= cfg.TRAIN.BG_THRESH_LO))[0]
+        # image is only valid if such boxes exist
+        valid = len(fg_inds) > 0 or len(bg_inds) > 0
+        return valid
+
+    num = len(roidb)
+    filtered_roidb = [(i,entry) for i,entry in enumerate(roidb) if is_valid(entry)]
+    num_after = len(filtered_roidb)
+    print 'Filtered {} roidb entries: {} -> {}'.format(num - num_after,
+                                                       num, num_after)
+    valid_idx = [i for i,_ in filtered_roidb]
+    filtered_roidb = [e for _, e in filtered_roidb]
+    return filtered_roidb, valid_idx
+
 
 def filter_roidb(roidb):
     """
     Remove roidb entries that have no usable RoIs.
     """
-               
     def is_valid(entry):
         # Valid images have:
         #   (1) At least one foreground RoI OR
