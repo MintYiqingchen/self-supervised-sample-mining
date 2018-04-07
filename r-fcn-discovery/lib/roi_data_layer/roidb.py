@@ -24,7 +24,8 @@ def prepare_roidb(imdb):
     sizes = [PIL.Image.open(imdb.image_path_at(i)).size
              for i in xrange(imdb.num_images)]
     roidb = imdb.roidb
-    for i in xrange(len(imdb.image_index)):
+    print '[FUNCTION] prepare_roidb:{}'.format(imdb.num_images)
+    for i in xrange(imdb.num_images):
         roidb[i]['image'] = imdb.image_path_at(i)
         roidb[i]['width'] = sizes[i][0]
         roidb[i]['height'] = sizes[i][1]
@@ -43,6 +44,7 @@ def prepare_roidb(imdb):
         # max overlap > 0 => class should not be zero (must be a fg class)
         nonzero_inds = np.where(max_overlaps > 0)[0]
         assert all(max_classes[nonzero_inds] != 0)
+    imdb.assign_roidb(roidb)
 
 
 def add_bbox_regression_targets(roidb):

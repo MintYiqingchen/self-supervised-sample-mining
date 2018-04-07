@@ -242,8 +242,26 @@ class coco(imdb):
 
         with open(cache_file, 'wb') as fid:
             cPickle.dump(gt_roidb, fid, cPickle.HIGHEST_PROTOCOL)
-        print 'wrote gt roidb to {}'.format(cache_file)
+        print 'wrote gt roidb to  {}'.format(cache_file)
         return gt_roidb
+    def replace_gt(self, ss_candidate, ss_fake_gt, flip):
+        '''replace gt with ss_fake_gt'''
+        gt = self.gt_roidb()
+        print('length of gt roidb:{}'.format(len(gt)))
+        if flip:
+            self._image_index=self._image_index[:len(gt)]
+        # replace some gt by fake_gt[fake_idx]
+        for j,i in enumerate(ss_candidate):
+            if (flip and i<len(gt)) or not flip:
+                gt[i]=ss_fake_gt[j]
+        if cfg.TRAIN.PROPOSAL_METHOD=='selective_search':
+            ss_roidb = self._load_selective_search_roidb(gt)
+            roidb = datasets.imdb.merge_roidbs(gt, ss_roidb)
+        else:
+            roidb = gt
+        print 'replace gt with self pace gt'
+        self._roidb = roidb
+        return roidb
 
     def _load_coco_annotation(self, index):
         """

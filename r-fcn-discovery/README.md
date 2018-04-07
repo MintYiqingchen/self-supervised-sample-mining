@@ -4,6 +4,7 @@
 + before generate roidb, use ClassController to set valid class (a mask) and \_reload flag
 + lib/datasets/pascal_voc.py \_load_annotation method generate roidb
 + filter_roidb function will automatically filter invalid bbox
++ randomly blur some images
 
 ## pipeline
 1. controlClass

@@ -9,11 +9,6 @@ from fast_rcnn.test import im_detect
 from fast_rcnn.nms_wrapper import nms
 from utils.timer import Timer
 import random
-CLASSES=('__background__','aeroplane', 'bicycle', 'bird', 'boat',
-                         'bottle', 'bus', 'car', 'cat', 'chair',
-                         'cow', 'diningtable', 'dog', 'horse',
-                         'motorbike', 'person', 'pottedplant',
-                         'sheep', 'sofa', 'train', 'tvmonitor')
 
 def choose_model(dir):
     '''
@@ -84,7 +79,7 @@ def bulk_detect(net, detect_idx, imdb, clslambda):
         Y = [] # every box in BBox has k*1 cls vector
         CONF_THRESH = 0.5 
         NMS_THRESH = 0.3
-        for cls_ind, cls in enumerate(CLASSES[1:]):
+        for cls_ind, cls in enumerate(imdb.classes[1:]):
             cls_ind += 1 # because we skipped background
             cls_boxes = boxes[:, 4:8]
             cls_scores = scores[:, cls_ind]
@@ -246,4 +241,33 @@ def vis_detections(im, class_name, dets, thresh=0.5):
     t0 = time.time()
     fig.savefig(str(t0)+'.jpg')
 
+def blur_image(roidbs):
+    '''
+    blur regions except BBox
+    '''
+    def _handle(roi, idx):
+        im = cv2.imread(roi['image'])
+        im_bbox = []
+        for box in roi['boxes']:
+            box = map(int, box)
+            im_bbox.append(im[box[1]:box[3], box[0]:box[2]])
+        new_im = cv2.blur(im, (20,20))
+        for i, box in enumerate(roi['boxes']):
+            box = map(int, box)
+            new_im[box[1]:box[3], box[0]:box[2]] = im_bbox[i]
+        path = 'tmpdata/{}.jpg'.format(idx)
+        cv2.imwrite(path, new_im)
+        assert os.path.exists(path), "didnt save successfully"
 
+        roi['image'] = path
+        return roi
+    print 'blur inrelevent regions'
+    res_roi = []
+    for i in range(len(roidbs)):
+        if len(roidbs[i]['boxes'])>0 and np.random.rand()<0.6 and not roidbs[i]['flipped']:
+            res_roi.append(roidbs[i].copy())
+            res_roi[i] = _handle(res_roi[i], i)
+        else:
+            res_roi.append(roidbs[i].copy())
+    print '[FUNCTION] blur :{} {}'.format(id(res_roi[0]), id(roidbs[0]))
+    return res_roi

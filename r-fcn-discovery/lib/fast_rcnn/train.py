@@ -1,4 +1,4 @@
-# --------------------------------------------------------
+#--------------------------------------------------------
 # Fast R-CNN
 # Copyright (c) 2015 Microsoft
 # Licensed under The MIT License [see LICENSE for details]
@@ -28,15 +28,15 @@ class ClassController(object):
         control = False
         if (self._now+1 <len(self.schedule) and nowepoch >= self.schedule[self._now+1][0]):
             self._now += 1
-            self._imdb.reset_image_index()
-            print 'invoke control'
             self._imdb.set_classes(self.schedule[self._now][1])
             control = True
+            print '[Function]controlClass: invoke control'
         return control
 
 def update_training_roidb(imdb, ss_candidate, ss_fake_gt):
     '''replace some gt with fake gt'''
-    if len(ss_candidate)==0:
+    if len(ss_candidate)==0 and not imdb.should_reload():
+        print '[FUNCTION] update_training_roidb: not change'
         return imdb.roidb
     imdb.replace_gt(ss_candidate,ss_fake_gt,cfg.TRAIN.USE_FLIPPED)
     return get_training_roidb(imdb)

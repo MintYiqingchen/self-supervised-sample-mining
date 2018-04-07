@@ -65,7 +65,7 @@ class imdb(object):
         #   flipped
         if self._roidb is not None and not self._reload:
             return self._roidb
-        print('reload')
+        print('[CLASS PROPERTY]roidb: reload')
         self._roidb = self.roidb_handler()
         return self._roidb
 
@@ -258,19 +258,33 @@ class imdb(object):
         ''' if this is a dummy imdb, just pass it'''
         print 'skip schedule for imdb {}'.format(self.name)
         pass
+    def should_reload(self):
+        return self._reload
+    def assign_roidb(self, roidbs):
+        self._roidb = roidbs
 
 from collections import OrderedDict
 class Imdbs(imdb):
     ''' manage many imdbs as one'''
     def __init__(self, imdbs, name="ComposeImdb"):
         super(Imdbs, self).__init__(name)
-        
         self.imdb_dict = OrderedDict()
         for im in imdbs:
             self.imdb_dict[im.name]=im
 
     def __getitem__(self, key):
         return self.imdb_dict[key]
+    def assign_roidb(self, roidbs):
+        for im in self.imdb_dict.values():
+            im._roidb = roidbs[:im.num_images]
+            roidbs = roidbs[im.num_images:]
+
+    def should_reload(self):
+        for im in self.imdb_dict.values():
+            if im.should_reload():
+                return True
+        return False
+
     def set_classes(self, number):
         '''not perfect implementation'''
         for im in self.imdb_dict.values():

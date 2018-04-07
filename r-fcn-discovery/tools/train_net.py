@@ -63,7 +63,7 @@ def parse_args():
     parser.add_argument('--enable_mmv', help='do not use multi model validation process',
                         action='store_true',default=False)
     parser.add_argument('--class_schedule', help='list classes index for incremental learning',
-                        default=[(0,10),(15000,16),(30000,21)], type=list)
+                        default=[(0,81)], type=list)
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -129,6 +129,7 @@ if __name__ == '__main__':
 
     # NOTICE: controlClass method should be invoked before get roidb
     classController.controlClass(nowepoch=0)
+
     roidb = get_training_roidb(imdb)
     print 'imdb classes: {}'.format(imdb.classes)
     print '{:d} roidb entries ,images:{}'.format(len(roidb), imdb.num_images)
@@ -139,33 +140,40 @@ if __name__ == '__main__':
     # some statistic to record
     alamount = 0; ssamount = 0
     discardamount = 0
-    # set bitmap for AL
-    bitmapImdb = BitMap(imdb.num_images)
     # choose valid initiail samples
     train_roidb, valid_idx = filter_blank_roidb(roidb)
 
-    initial_num = len(valid_idx)
-    print 'The amount of images: %d'%(initial_num)
-    for i in valid_idx:
+    sample_num = len(valid_idx)
+    
+    # set bitmap for AL
+    bitmapImdb = BitMap(imdb.num_images)
+
+    # initial image
+    initial_num = int(len(valid_idx)*0.1)
+
+    print ('The 10% coco of images for initial:{}'.format(initial_num))
+
+    for i in range(initial_num):
         bitmapImdb.set(i)
 
+    train_roidb = [train_roidb[i] for i in range(initial_num)]
     pretrained_model_name = args.pretrained_model
 
     # static parameters
     tao = args.max_iters
     # initial hypeparameters
-    gamma = 0.3; clslambda = np.array([-np.log(0.9)]*21)
+    gamma = 0.3; clslambda = np.array([-np.log(0.9)]*imdb.num_classes)
     # train record
     loopcounter = 0; train_iters = 0; iters_sum = train_iters
     # control al proportion
-    al_proportion_checkpoint = [int(x*initial_num) for x in np.linspace(0.2,4,20)]
+    al_proportion_checkpoint = [int(x*sample_num) for x in np.linspace(0.1,23,12)]
     # control ss proportion with respect to al proportion
-    ss_proportion_checkpoint = [int(x*initial_num) for x in np.linspace(0.4,8,20)]
+    ss_proportion_checkpoint = [int(x*sample_num) for x in np.linspace(0.1,23,12)]
 
     sw = SolverWrapper(args.solver, train_roidb, output_dir,
                         pretrained_model=pretrained_model_name)
     # with voc2007 to pretrained an initial model
-    sw.train_model(10000)
+    # sw.train_model(150000)
 
     while(True):
         # detact unlabeledidx samples
@@ -176,7 +184,7 @@ if __name__ == '__main__':
         trained_models = choose_model(output_dir)
         pretrained_model_name = trained_models[-1]
         modelpath = os.path.join(output_dir, pretrained_model_name)
-        protopath = os.path.join('models/pascal_voc/ResNet-50/rfcn_end2end',
+        protopath = os.path.join('models/coco/ResNet-101/rfcn_end2end',
                 'test_agnostic.prototxt')
         print 'choose latest model:{}'.format(modelpath)
         model = load_model(protopath,modelpath)
@@ -185,14 +193,15 @@ if __name__ == '__main__':
         al_candidate_idx = [] # record al samples index in imdb
         ss_candidate_idx = [] # record ss samples index in imdb
         ss_fake_gt = [] # record fake labels for ss
-        cls_loss_sum = np.zeros((21,)) # record loss for each cls
+        cls_loss_sum = np.zeros((imdb.num_classes,)) # record loss for each cls
         count_box_num = 0 # used for update clslambda
-
+        
         if not (args.disable_al or args.disable_ss):
+           
             # return detect results of the unlabeledidx samples with the latest model
             scoreMatrix, boxRecord,yVecs, eps = bulk_detect(model, unlabeledidx, imdb, clslambda)
-            # logging.debug('scoreMatrix:{}, boxRecord:{}, eps:{}, yVecs:{}'.format(scoreMatrix.shape, boxRecord.shape, eps, yVecs.shape))
-
+            logging.debug('scoreMatrix:{}, boxRecord:{}, eps:{}, yVecs:{}'.format(scoreMatrix.shape, boxRecord.shape, eps, yVecs.shape))
+            
             for i in range(len(unlabeledidx)):
                 img_boxes = []; cls=[]; # fake ground truth
                 count_box_num += len(boxRecord[i])
@@ -268,18 +277,19 @@ if __name__ == '__main__':
         else:
             ss_candidate_idx=[]
             ss_fake_gt = []
-
+        
         # generate training set for next loop
         for idx in al_candidate_idx:
             bitmapImdb.set(idx)
         next_train_idx = bitmapImdb.nonzero(); next_train_idx.extend(ss_candidate_idx)
-
+        
         # update the roidb with ss_fake_gt
-	control = classController.controlClass(iters_sum)
+    	control = classController.controlClass(iters_sum)
         print imdb.classes
         if control:
             print 'change class roidb'
         train_roidb = update_training_roidb(imdb,ss_candidate_idx,ss_fake_gt)
+        train_roidb = blur_image(train_roidb)
         if not (args.disable_ss or args.disable_al):
             train_roidb = [train_roidb[i] for i in next_train_idx]
 
@@ -291,7 +301,7 @@ if __name__ == '__main__':
             cls_loss_sum = 0.0
 
         # add the labeled samples to finetune W
-        train_iters = min(6000 ,len(train_roidb)*10-train_iters)
+        train_iters = 30000 # min(30000 ,len(train_roidb)*10-train_iters)
         iters_sum += train_iters
         sw.update_roidb(train_roidb)
         sw.train_model(iters_sum)
