@@ -7,3 +7,7 @@ This folder just include the code writing by MintYiqingchen, doesn't include all
 The fast-rcnn come from https://github.com/rbgirshick/fast-rcnn.
 
 Some visulized results are in image folder.
+
+## usage
+put corresponding folders (xxx/lib/ xxx/tools/) under project root
+recompile lib/
