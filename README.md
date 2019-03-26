@@ -1,5 +1,8 @@
 # self-supervised-sample-mining
 Code for paper [Self-supervised Sample Mining with Switchable Selection Criteria for Object Detection](https://arxiv.org/abs/1803.09867)
+Main repositories
+* https://github.com/yanxp/ASM
+* https://github.com/yanxp/SSM
 
 ## fast rcnn
 This folder just include the code writing by MintYiqingchen, doesn't include all code for this paper.
